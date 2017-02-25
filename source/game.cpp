@@ -941,91 +941,107 @@ bool Game::playerMoveCreature(uint32_t playerId, uint32_t movingCreatureId,
 
 ReturnValue Game::internalMoveCreature(Creature* creature, Direction direction, uint32_t flags /*= 0*/)
 {
-	Cylinder* fromTile = creature->getTile();
-	Cylinder* toTile = NULL;
-
-	const Position& currentPos = creature->getPosition();
-	Position destPos = currentPos;
-
-	bool canChangeFloor = true;
-	switch(direction){
-		case NORTH:
-			destPos.y -= 1;
-			break;
-
-		case SOUTH:
-			destPos.y += 1;
-			break;
-
-		case WEST:
-			destPos.x -= 1;
-			break;
-
-		case EAST:
-			destPos.x += 1;
-			break;
-
-		case SOUTHWEST:
-			destPos.x -= 1;
-			destPos.y += 1;
-			canChangeFloor = false;
-			break;
-
-		case NORTHWEST:
-			destPos.x -= 1;
-			destPos.y -= 1;
-			canChangeFloor = false;
-			break;
-
-		case NORTHEAST:
-			destPos.x += 1;
-			destPos.y -= 1;
-			canChangeFloor = false;
-			break;
-
-		case SOUTHEAST:
-			destPos.x += 1;
-			destPos.y += 1;
-			canChangeFloor = false;
-			break;
-	}
-
-	if(creature->getPlayer() && canChangeFloor){
-		//try go up
-		if(currentPos.z != 8 && creature->getTile()->hasHeight(3)){
-			Tile* tmpTile = getTile(currentPos.x, currentPos.y, currentPos.z - 1);
-			if(tmpTile == NULL || (tmpTile->ground == NULL && !tmpTile->hasProperty(BLOCKSOLID))){
-				tmpTile = getTile(destPos.x, destPos.y, destPos.z - 1);
-				if(tmpTile && tmpTile->ground && !tmpTile->hasProperty(BLOCKSOLID)){
-					flags = flags | FLAG_IGNOREBLOCKITEM | FLAG_IGNOREBLOCKCREATURE;
-					if (!tmpTile->floorChange()){
+    Cylinder* fromTile = creature->getTile();
+    Cylinder* toTile = NULL;
+ 
+    const Position& currentPos = creature->getPosition();
+    Position destPos = currentPos;
+ 
+    bool canChangeFloor = true;
+    switch(direction){
+        case NORTH:
+            destPos.y -= 1;
+            break;
+ 
+        case SOUTH:
+            destPos.y += 1;
+            break;
+ 
+        case WEST:
+            destPos.x -= 1;
+            break;
+ 
+        case EAST:
+            destPos.x += 1;
+            break;
+ 
+        case SOUTHWEST:
+            destPos.x -= 1;
+            destPos.y += 1;
+            canChangeFloor = false;
+            break;
+ 
+        case NORTHWEST:
+            destPos.x -= 1;
+            destPos.y -= 1;
+            canChangeFloor = false;
+            break;
+ 
+        case NORTHEAST:
+            destPos.x += 1;
+            destPos.y -= 1;
+            canChangeFloor = false;
+            break;
+ 
+        case SOUTHEAST:
+            destPos.x += 1;
+            destPos.y += 1;
+            canChangeFloor = false;
+            break;
+    }
+ 
+    if(creature->getPlayer() && canChangeFloor){
+        //try go up
+        if(currentPos.z != 8 && creature->getTile()->hasHeight(3)){
+            Tile* tmpTile = map->getTile(currentPos.x, currentPos.y, currentPos.z - 1);
+            if(tmpTile == NULL || (tmpTile->ground == NULL && !tmpTile->hasProperty(BLOCKSOLID))){
+                tmpTile = map->getTile(destPos.x, destPos.y, destPos.z - 1);
+                if(tmpTile && tmpTile->ground && !tmpTile->hasProperty(BLOCKSOLID)){
+                    flags = flags | FLAG_IGNOREBLOCKITEM | FLAG_IGNOREBLOCKCREATURE;
+                    if (!tmpTile->floorChange()){
 					destPos.z -= 1;
 				}
 			}
 		}
 		}
-		else{
-			//try go down
-			Tile* tmpTile = getTile(destPos);
-			if(currentPos.z != 7 && (tmpTile == NULL || (tmpTile->ground == NULL && !tmpTile->hasProperty(BLOCKSOLID)))){
-				tmpTile = getTile(destPos.x, destPos.y, destPos.z + 1);
-
-				if(tmpTile && tmpTile->hasHeight(3)){
-					flags = flags | FLAG_IGNOREBLOCKITEM | FLAG_IGNOREBLOCKCREATURE;
-					destPos.z += 1;
-				}
-			}
-		}
-	}
-
-	toTile = getTile(destPos);
-
-	ReturnValue ret = RET_NOTPOSSIBLE;
-	if(toTile != NULL){
-		ret = internalMoveCreature(creature, fromTile, toTile, flags);
-	}
-
-	return ret;
+        else{
+            //try go down
+            Tile* tmpTile = map->getTile(destPos);
+            if(currentPos.z != 7 && (tmpTile == NULL || (tmpTile->ground == NULL && !tmpTile->hasProperty(BLOCKSOLID)))){
+                tmpTile = map->getTile(destPos.x, destPos.y, destPos.z + 1);
+ 
+                if(tmpTile && tmpTile->hasHeight(3)){
+                    flags = flags | FLAG_IGNOREBLOCKITEM | FLAG_IGNOREBLOCKCREATURE;
+                    destPos.z += 1;
+                }
+            }
+        }
+    }
+ 
+    toTile = map->getTile(destPos);
+   
+    Tile* toPos = getTile(destPos.x, destPos.y, destPos.z);
+    Tile* fromPos = getTile(currentPos.x, currentPos.y, currentPos.z);
+   
+    ReturnValue ret = RET_NOTPOSSIBLE;
+ 
+    if(toTile != NULL){
+        if (currentPos.z > destPos.z && toPos->getHeight() > 1);
+            // not possible
+        else if ((((toPos->getHeight() - fromPos->getHeight()) < 2)) ||
+            (fromPos->hasHeight(3) && (currentPos.z == destPos.z)) ||
+            ((currentPos.z < destPos.z) && (toPos->hasHeight(3) && (fromPos->getHeight() < 2))))
+            ret = internalMoveCreature(creature, fromTile, toTile, flags);
+    }
+ 
+    if(ret != RET_NOERROR){
+        if(Player* player = creature->getPlayer()){
+            player->sendCancelMessage(ret);
+            player->sendCancelWalk();
+        }
+    }
+ 
+    return ret;
 }
 
 ReturnValue Game::internalMoveCreature(Creature* creature, Cylinder* fromCylinder, Cylinder* toCylinder, uint32_t flags /*= 0*/)
