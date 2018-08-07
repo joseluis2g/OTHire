@@ -1036,6 +1036,15 @@ ReturnValue Game::internalMoveCreature(Creature* creature, Cylinder* fromCylinde
 		return ret;
 	}
 
+	//height check
+	if (g_config.getNumber(ConfigManager::PARCEL_BLOCK)) {
+		Tile* toTile = toCylinder->getTile();
+		Tile* fromTile = fromCylinder->getTile();
+		if(toTile->getHeight() - fromTile->getHeight() >= 2 && toTile->getPosition().z == fromTile->getPosition().z) {
+			return RET_NOTPOSSIBLE;
+		}
+	}
+
 	fromCylinder->getTile()->moveCreature(creature, toCylinder);
 
 	if(creature->getParent() == toCylinder){
@@ -2346,6 +2355,10 @@ bool Game::playerUseItem(uint32_t playerId, const Position& pos, uint8_t stackPo
 	if(!player || player->isRemoved())
 		return false;
 
+	if(player->eventWalk!=0){
+		player->lastStepCost=2;
+	}
+
 	Thing* thing = internalGetThing(player, pos, stackPos, spriteId, STACKPOS_USEITEM);
 
 	if(!thing){
@@ -2368,7 +2381,7 @@ bool Game::playerUseItem(uint32_t playerId, const Position& pos, uint8_t stackPo
 	if(ret != RET_NOERROR){
 		if(ret == RET_TOOFARAWAY){
 			std::list<Direction> listDir;
-			if(getPathToEx(player, pos, listDir, 0, 1, true, true)){
+			if(getPathToEx(player, pos, listDir, 0, 1, true, true, 10)){
 				g_dispatcher.addTask(createTask(boost::bind(&Game::playerAutoWalk,
 					this, player->getID(), listDir)));
 
@@ -3146,6 +3159,9 @@ bool Game::playerInviteToParty(uint32_t playerId, uint32_t invitedId)
 	if(!invitedPlayer || invitedPlayer->isRemoved() || invitedPlayer->isInviting(player)){
 		return false;
 	}
+	
+	if(playerId == invitedId)
+		return false;
 
 	if(invitedPlayer->getParty()){
 		std::stringstream ss;

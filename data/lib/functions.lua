@@ -284,15 +284,18 @@ function playerExists(name)
 	return (getPlayerGUIDByName(name) ~= 0)
 end
 
-function getTibiaTime()
-	local worldTime = getWorldTime()
-	local hours = 0
-	while (worldTime > 60) do
+function getTibiaTime(num)
+	local minutes, hours = getWorldTime(), 0
+	while (minutes > 60) do
 		hours = hours + 1
-		worldTime = worldTime - 60
+		minutes = minutes - 60
 	end
 
-	return tostring(hours .. ':' .. worldTime)
+	if(num) then
+		return {hours = hours, minutes = minutes}
+	end
+
+	return {hours =  hours < 10 and '0' .. hours or '' .. hours, minutes = minutes < 10 and '0' .. minutes or '' .. minutes}
 end
 
 exhaustion =
@@ -693,6 +696,15 @@ function doPlayerGiveItem(cid, itemid, count, charges)
 end
 
 function doPlayerTakeItem(cid, itemid, count)
+
+	local equipped = false
+	if isItemStackable(itemid) == false and isEquipped(cid, itemid) == true then
+		if getPlayerItemCount(cid,itemid) >= count+1 then
+			count = count + 1
+			equipped = true
+		end
+	end
+	
 	if(getPlayerItemCount(cid,itemid) >= count) then
 
 		while count > 0 do
@@ -706,12 +718,27 @@ function doPlayerTakeItem(cid, itemid, count)
 
 			if(ret ~= false) then
 				count = count-tempcount
+				
 			else
 				return false
 			end
 		end
+		
+		if equipped == true then
+			doPlayerAddItem(cid, itemid, 1)
+		end
 
 		if(count == 0) then
+			return true
+		end
+	end
+	
+	return false
+end
+
+function isEquipped(cid, itemid)
+	for i = 1, 10 do
+		if getPlayerSlotItem(cid, i).itemid == itemid then
 			return true
 		end
 	end

@@ -347,44 +347,36 @@ bool Combat::isUnjustKill(const Creature* attacker, const Creature* target)
 
 ReturnValue Combat::checkPVPExtraRestrictions(const Creature* attacker, const Creature* target, bool isWalkCheck)
 {
-	#ifdef __MIN_PVP_LEVEL_APPLIES_TO_SUMMONS__
-	const Player* targetPlayer;
-	if (g_config.getNumber(ConfigManager::MIN_PVP_LEVEL_APPLIES_TO_SUMMONS))
-		targetPlayer = target->getPlayerInCharge();
-	else
-		targetPlayer = target->getPlayer();
-	#else
-	const Player* targetPlayer = target->getPlayer();
-	#endif
-	const Player* attackerPlayer= attacker->getPlayerInCharge();
+	if((g_game.getWorldType() != WORLD_TYPE_NO_PVP) && (g_config.getNumber(ConfigManager::MIN_PVP_LEVEL) != 0)) {
+		#ifdef __MIN_PVP_LEVEL_APPLIES_TO_SUMMONS__
+		const Player* targetPlayer;
+		if (g_config.getNumber(ConfigManager::MIN_PVP_LEVEL_APPLIES_TO_SUMMONS))
+			targetPlayer = target->getPlayerInCharge();
+		else
+			targetPlayer = target->getPlayer();
+		#else
+		const Player* targetPlayer = target->getPlayer();
+		#endif
+		const Player* attackerPlayer= attacker->getPlayerInCharge();
 
-	if(targetPlayer && attackerPlayer){
-		bool stopAttack = false;
+		if(targetPlayer && attackerPlayer){
+			bool stopAttack = false;
 
-		if(g_game.getWorldType() == WORLD_TYPE_NO_PVP) {
-			if(isWalkCheck){
+			uint32_t p_level = g_config.getNumber(ConfigManager::MIN_PVP_LEVEL);
+			uint32_t attackerLevel = attackerPlayer->getLevel();
+			uint32_t targetLevel = targetPlayer->getLevel();
+			if((attackerLevel >= p_level && targetLevel < p_level && isWalkCheck) ||
+				(!isWalkCheck && (attackerLevel < p_level || targetLevel < p_level))){
 				stopAttack = true;
 			}
-		}
-		else{
-			if(!isWalkCheck){
-				uint32_t p_level = g_config.getNumber(ConfigManager::MIN_PVP_LEVEL);
-				uint32_t attackerLevel = attackerPlayer->getLevel();
-				uint32_t targetLevel = targetPlayer->getLevel();
 
-				if((attackerLevel >= p_level && targetLevel < p_level && isWalkCheck) ||
-					(!isWalkCheck && (attackerLevel < p_level || targetLevel < p_level))){
-					stopAttack = true;
+			if(stopAttack){
+				if(target->getPlayer()){
+					return RET_YOUMAYNOTATTACKTHISPERSON;
 				}
-			}
-		}
-
-		if(stopAttack){
-			if(target->getPlayer()){
-				return RET_YOUMAYNOTATTACKTHISPERSON;
-			}
-			else{
-				return RET_YOUMAYNOTATTACKTHISCREATURE;
+				else{
+					return RET_YOUMAYNOTATTACKTHISCREATURE;
+				}
 			}
 		}
 	}
@@ -425,7 +417,22 @@ ReturnValue Combat::canDoCombat(const Creature* attacker, const Creature* target
 			if(target->getPlayer() && target->getTile()->hasFlag(TILESTATE_NOPVPZONE)){
 				return RET_ACTIONNOTPERMITTEDINANONPVPZONE;
 			}
+			
+			//no-pvp server mode
+			if (g_game.getWorldType() == WORLD_TYPE_NO_PVP) {
+				if (attacker->getPlayer() || (attacker->isSummon() && attacker->getMaster()->getPlayer())) {
+					if (target->getPlayer()) {
+						return RET_YOUMAYNOTATTACKTHISPERSON;
+						std::cout << "RET_YOUMAYNOTATTACKTHISPERSON" << std::endl;
+					}
 
+					if (target->isSummon() && target->getMaster()->getPlayer()) {
+						return RET_YOUMAYNOTATTACKTHISCREATURE;
+						std::cout << "RET_YOUMAYNOTATTACKTHISCREATURE" << std::endl;
+					}
+				}
+			}
+			
 			return Combat::checkPVPExtraRestrictions(attacker, target, false);
 		}
 	}
@@ -830,6 +837,7 @@ void Combat::CombatFunc(Creature* caster, const Position& pos,
 	g_game.getSpectators(list, pos, false, true, maxX + Map::maxViewportX, maxX + Map::maxViewportX,
 		maxY + Map::maxViewportY, maxY + Map::maxViewportY);
 
+	std::vector<Creature*> creature_vec;
 	for(std::list<Tile*>::iterator it = tileList.begin(); it != tileList.end(); ++it){
 		Tile* iter_tile = *it;
 		bool bContinue = true;
@@ -855,21 +863,34 @@ void Combat::CombatFunc(Creature* caster, const Position& pos,
 						}
 					}
 
-					if(!params.isAggressive || (caster != *cit && Combat::canDoCombat(caster, *cit) == RET_NOERROR)){
-						func(caster, *cit, params, data);
-
-						if(params.targetCallback){
-							params.targetCallback->onTargetCombat(caster, *cit);
-						}
-
-						if(func == CombatDispelFunc || func == CombatConditionFunc){
-							onCreatureDoCombat(caster, *cit, params.isAggressive);
+					if (!params.isAggressive || (caster != *cit && Combat::canDoCombat(caster, *cit) == RET_NOERROR)){
+						if ((*cit)->getCreature()) {
+							creature_vec.push_back(*cit);
 						}
 					}
-				}
-			}
+ 				}
+ 			}
+ 			combatTileEffects(list, caster, iter_tile, params);
+ 		}
+ 	}
 
-			combatTileEffects(list, caster, iter_tile, params);
+	if (data) {
+		Combat2Var* var = (Combat2Var*)data;
+		int damage = random_range(var->minChange, var->maxChange);
+		var->minChange = damage;
+		var->maxChange = damage;
+	}
+
+	std::vector<Creature*>::const_iterator cit = creature_vec.begin();
+	for (; cit != creature_vec.end(); ++cit) {
+		func(caster, *cit, params, data);
+
+		if (params.targetCallback){
+			params.targetCallback->onTargetCombat(caster, *cit);
+		}
+
+		if (func == CombatDispelFunc || func == CombatConditionFunc){
+			onCreatureDoCombat(caster, *cit, params.isAggressive);
 		}
 	}
 

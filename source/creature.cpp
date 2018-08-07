@@ -1076,8 +1076,7 @@ BlockType_t Creature::blockHit(Creature* attacker, CombatType_t combatType, int3
 
 		if(checkDefense && hasDefense){
 			int32_t maxDefense = getDefense();
-			int32_t minDefense = maxDefense / 2;
-			damage -= random_range(minDefense, maxDefense);
+			damage -= random_range(0, maxDefense);
 			if(damage <= 0){
 				damage = 0;
 				blockType = BLOCK_DEFENSE;
@@ -1159,13 +1158,42 @@ void Creature::goToFollowCreature()
 	if(followCreature){
 		FindPathParams fpp;
 		getPathSearchParams(followCreature, fpp);
+		
+		Monster* monster = getMonster();
+		if (monster && !monster->getMaster() && (monster->isFleeing() || fpp.maxTargetDist > 1)) {
+			Direction dir = DIRECTION_NONE;
 
-		if(g_game.getPathToEx(this, followCreature->getPosition(), listWalkDir, fpp)){
-			hasFollowPath = true;
-			startAutoWalk(listWalkDir);
-		}
-		else{
-			hasFollowPath = false;
+			if (monster->isFleeing()) {
+				monster->getFleeStep(followCreature->getPosition(), dir);
+			} else { //maxTargetDist > 1
+				if (!monster->getDistanceStep(followCreature->getPosition(), dir)) {
+					// if we can't get anything then let the A* calculate
+					listWalkDir.clear();
+					if (g_game.getPathToEx(this, followCreature->getPosition(), listWalkDir, fpp)) {
+						hasFollowPath = true;
+						startAutoWalk(listWalkDir);
+					} else {
+						hasFollowPath = false;
+					}
+					return;
+				}
+			}
+
+			if (dir != DIRECTION_NONE) {
+				listWalkDir.clear();
+				listWalkDir.push_front(dir);
+
+				hasFollowPath = true;
+				startAutoWalk(listWalkDir);
+			}
+		} else {
+			if(g_game.getPathToEx(this, followCreature->getPosition(), listWalkDir, fpp)){
+				hasFollowPath = true;
+				startAutoWalk(listWalkDir);
+			}
+			else{
+				hasFollowPath = false;
+			}
 		}
 	}
 
@@ -1624,6 +1652,22 @@ int32_t Creature::getStepDuration() const
 			duration = (1000 * groundSpeed) / stepSpeed;
 		}
 	}
+
+	const Monster* monster = getMonster();
+	if (monster && !monster->isFleeing() && !monster->getMaster() && attackedCreature) {
+		MonsterType* mType = g_monsters.getMonsterType(monster->getName());
+		if (mType->targetDistance > 1) {
+			const Position& targetPos = attackedCreature->getPosition();
+			const Position& creaturePos = getPosition();
+			int_fast32_t dx = std::abs(creaturePos.x - targetPos.x);
+			int_fast32_t dy = std::abs(creaturePos.y - targetPos.y);
+			if (dx <= 1 && dy <= 1) {
+				duration *= 2;
+			}
+		}
+	}
+	
+	
 
 	return duration * lastStepCost;
 }

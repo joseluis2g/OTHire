@@ -743,7 +743,7 @@ ReturnValue Tile::__queryAdd(int32_t index, const Thing* thing, uint32_t count,
 						//
 					}
 					else if(iiType.blockSolid || iiType.isSolidForItems()){
-						if(item->isPickupable()){
+						if(item->isPickupable() || item->isCorpse()){
 							if(iiType.allowPickupable){
 								continue;
 							}
@@ -1564,6 +1564,25 @@ void Tile::__internalAddThing(uint32_t index, Thing* thing)
 
 		updateTileFlags(item, false);
 	}
+}
+
+int32_t Tile::getHeight() {
+    int32_t height = 0;
+    if(ground) {
+        if(ground->hasProperty(HASHEIGHT)) {
+            ++height;
+        }
+    }
+ 
+    if(const TileItemVector* items = getItemList()) {
+        for(ItemVector::const_iterator it = items->begin(); it != items->end(); ++it) {
+            if((*it)->hasProperty(HASHEIGHT)) {
+                ++height;
+            }
+        }
+    }
+ 
+    return std::min(height, 4);
 }
 
 void Tile::updateTileFlags(Item* item, bool removed)

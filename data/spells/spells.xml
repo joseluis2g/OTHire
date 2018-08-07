@@ -165,7 +165,7 @@
 	<instant name="Energy Wave" words="exevo mort hur" needlearn="0" lvl="38" mana="250" prem="1" direction="1" script="attack/energy_wave.lua">
 		<vocation name="Sorcerer"/> <vocation name="Master Sorcerer"/>
 	</instant>
-	<instant name="Wild Growth" words="exevo grav vita" needlearn="0" lvl="27" mana="220" prem="1" script="support/wild_growth.lua">
+	<instant name="Wild Growth" words="exevo grav vita" needlearn="0" lvl="27" mana="220" prem="1" direction="1" blocktype="all" script="support/wild_growth.lua">
 		<vocation name="Elder Druid"/>
 	</instant>
 
@@ -225,6 +225,7 @@
 	<conjure name="Heavy Magic Missile" words="adori gran" needlearn="0" lvl="25" mana="280" soul="2" reagentId="2260" conjureId="2311" conjureCount="5" function="conjureRune">
 		<vocation name="Sorcerer"/> <vocation name="Master Sorcerer"/>
 		<vocation name="Druid"/>	<vocation name="Elder Druid"/>
+		<vocation name="Paladin"/>	<vocation name="Royal Paladin"/>
 	</conjure>
 	<conjure name="Conjure Explosive Arrow" words="exevo con flam" needlearn="0" lvl="25" mana="290" soul="3" conjureId="2546" conjureCount="5" function="conjureItem">
 		<vocation name="Paladin"/>	<vocation name="Royal Paladin"/>
@@ -256,6 +257,7 @@
 	</conjure>
 	<conjure name="Great Fireball" words="adori gran flam" needlearn="0" lvl="23" mana="480" soul="3" reagentId="2260" conjureId="2304" conjureCount="2" function="conjureRune">
 		<vocation name="Sorcerer"/> <vocation name="Master Sorcerer"/>
+		<vocation name="Druid"/>	<vocation name="Elder Druid"/>
 	</conjure>
 	<conjure name="Explosion" words="adevo mas hur" needlearn="0" lvl="31" mana="720" soul="4" reagentId="2260" conjureId="2313" conjureCount="3" function="conjureRune">
 		<vocation name="Sorcerer"/> <vocation name="Master Sorcerer"/>

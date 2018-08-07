@@ -537,9 +537,8 @@ void Player::getShieldAndWeapon(const Item* &shield, const Item* &weapon) const
 
 int32_t Player::getDefense() const
 {
-	int32_t baseDefense = 5;
 	int32_t defenseSkill = 0;
-	int32_t defenseValue = 0;
+	int32_t defenseValue = 7;
 	int32_t extraDef = 0;
 	float defenseFactor = getDefenseFactor();
 	const Item* weapon = NULL;
@@ -557,8 +556,6 @@ int32_t Player::getDefense() const
 		defenseSkill = getSkill(SKILL_SHIELD, SKILL_LEVEL);
 	}
 
-	defenseValue += baseDefense;
-
 	if(defenseSkill == 0)
 		return 0;
 
@@ -566,7 +563,7 @@ int32_t Player::getDefense() const
 		defenseValue = int32_t(defenseValue * vocation->getBaseDefense());
 	}
 
-	return ((int32_t)std::ceil(((float)(defenseSkill * (defenseValue * 0.015)) + (defenseValue * 0.1)) * defenseFactor));
+	return ((int32_t)std::floor(((float)(defenseSkill * (defenseValue * 0.05))) * defenseFactor));
 }
 
 float Player::getAttackFactor() const
@@ -1779,7 +1776,7 @@ void Player::onCreatureMove(const Creature* creature, const Tile* newTile, const
 			getParty()->updateSharedExperience();
 		}
 
-		if(ConfigManager::STAIRHOP_EXHAUSTED > 0){
+		if(g_config.getNumber(ConfigManager::STAIRHOP_EXHAUSTED) > 0){
 			if(teleport || (oldPos.z != newPos.z)){
 				addCondition(Condition::createCondition(CONDITIONID_DEFAULT, CONDITION_PACIFIED,
 					g_config.getNumber(ConfigManager::STAIRHOP_EXHAUSTED)));
@@ -2362,6 +2359,7 @@ uint32_t Player::getIP() const
 void Player::sendToRook()
 {
 	setVocation(VOCATION_NONE);
+	storageMap.clear();
 	addStorageValue(g_config.getNumber(ConfigManager::STORAGE_SENDROOK), 1);
 
 	level = 1;
@@ -3132,127 +3130,54 @@ ReturnValue Player::__queryRemove(const Thing* thing, uint32_t count, uint32_t f
 Cylinder* Player::__queryDestination(int32_t& index, const Thing* thing, Item** destItem,
 	uint32_t& flags)
 {
-	if(!index /*drop to capacity window*/ || index == INDEX_WHEREEVER){
+	if(index == 0 /*drop to capacity window*/ || index == INDEX_WHEREEVER){
 		*destItem = NULL;
+
 		const Item* item = thing->getItem();
-		if(!item){
+		if(item == NULL){
 			return this;
 		}
 
-		bool autoStack = !((flags & FLAG_IGNOREAUTOSTACK) == FLAG_IGNOREAUTOSTACK);
-		if((!autoStack || !item->isStackable()) && backpack.first &&
-			backpack.first->__queryAdd(backpack.second, item, item->getItemCount(), flags)){
-			index = backpack.second;
-			if(backpack.second != INDEX_WHEREEVER){
-				++backpack.second;
-			}
-
-			return backpack.first;
-		}
-
-		std::list<std::pair<Container*, int32_t> > containers;
-		std::list<std::pair<Cylinder*, int32_t> > freeSlots;
-		for(int32_t i = SLOT_FIRST; i < SLOT_LAST; ++i){
-			if(Item* invItem = inventory[i]){
-				if(invItem == item || invItem == tradeItem){
-					continue;
-				}
-
-				if(autoStack && item->isStackable() && __queryAdd(i, item, item->getItemCount(), 0)
-					== RET_NOERROR && invItem->getID() == item->getID() && invItem->getItemCount() < 100){
-					*destItem = invItem;
-					index = i;
-					return this;
-				}
-
-				if(Container* container = invItem->getContainer()){
-					if(!autoStack && !backpack.first && container->__queryAdd(
-						INDEX_WHEREEVER, item, item->getItemCount(), flags) == RET_NOERROR){
-						index = INDEX_WHEREEVER;
-						backpack = std::make_pair(container, index);
-						return container;
-					}
-
-					containers.push_back(std::make_pair(container, 0));
-				}
-			}
-			else if(!autoStack){
-				if(__queryAdd(i, item, item->getItemCount(), 0) == RET_NOERROR)	{
+		//find a appropiate slot
+		for(int i = SLOT_FIRST; i < SLOT_LAST; ++i){
+			if(inventory[i] == NULL){
+				if(__queryAdd(i, item, item->getItemCount(), 0) == RET_NOERROR){
 					index = i;
 					return this;
 				}
 			}
-			else{
-				freeSlots.push_back(std::make_pair(this, i));
-			}
 		}
 
-		int32_t deepness = g_config.getNumber(ConfigManager::PLAYER_QUERYDESTINATION_DEEPNESS);
-		while(!containers.empty()){
-			Container* tmpContainer = containers.front().first;
-			int32_t level = containers.front().second;
-
-			containers.pop_front();
-			if(!tmpContainer){
+		//try containers
+		std::list<Container*> containerList;
+		for(int i = SLOT_FIRST; i < SLOT_LAST; ++i){
+			if(inventory[i] == tradeItem){
 				continue;
 			}
 
-			for(uint32_t n = 0; n < tmpContainer->capacity(); ++n){
-				if(Item* tmpItem = tmpContainer->getItem(n)){
-					if(tmpItem == item || tmpItem == tradeItem){
-						continue;
-					}
-
-					if(autoStack && item->isStackable() && tmpContainer->__queryAdd(n, item, item->getItemCount(),
-						0) == RET_NOERROR && tmpItem->getID() == item->getID() && tmpItem->getItemCount() < 100){
-						index = n;
-						*destItem = tmpItem;
-						return tmpContainer;
-					}
-
-					if(Container* container = tmpItem->getContainer()){
-						if(!autoStack && container->__queryAdd(INDEX_WHEREEVER,
-							item, item->getItemCount(), flags) == RET_NOERROR){
-							index = INDEX_WHEREEVER;
-							backpack = std::make_pair(container, index);
-							return container;
-						}
-
-						if(deepness < 0 || level < deepness){
-							containers.push_back(std::make_pair(container, level + 1));
-						}
-					}
+			if(Container* subContainer = dynamic_cast<Container*>(inventory[i])){
+				if(subContainer->__queryAdd(-1, item, item->getItemCount(), 0) == RET_NOERROR){
+					index = INDEX_WHEREEVER;
+					*destItem = NULL;
+					return subContainer;
 				}
-				else{
-					if(!autoStack){
-						if(tmpContainer->__queryAdd(n, item, item->getItemCount(), 0) == RET_NOERROR){
-							index = n;
-							backpack = std::make_pair(tmpContainer, index + 1);
-							return tmpContainer;
-						}
-					}
-					else{
-						freeSlots.push_back(std::make_pair(tmpContainer, n));
-					}
 
-					break; // one slot to check is definitely enough.
-				}
+				containerList.push_back(subContainer);
 			}
 		}
 
-		if(autoStack){
-			while(!freeSlots.empty()){
-				Cylinder* tmpCylinder = freeSlots.front().first;
-				int32_t i = freeSlots.front().second;
-
-				freeSlots.pop_front();
-				if(!tmpCylinder){
+		//check deeper in the containers
+		for(std::list<Container*>::iterator it = containerList.begin(); it != containerList.end(); ++it){
+			for(ContainerIterator iit = (*it)->begin(); iit != (*it)->end(); ++iit){
+				if((*iit) == tradeItem){
 					continue;
 				}
 
-				if(tmpCylinder->__queryAdd(i, item, item->getItemCount(), flags) == RET_NOERROR){
-					index = i;
-					return tmpCylinder;
+				Container* subContainer = dynamic_cast<Container*>(*iit);
+				if(subContainer && subContainer->__queryAdd(-1, item, item->getItemCount(), 0) == RET_NOERROR){
+					index = INDEX_WHEREEVER;
+					*destItem = NULL;
+					return subContainer;
 				}
 			}
 		}
@@ -3261,17 +3186,18 @@ Cylinder* Player::__queryDestination(int32_t& index, const Thing* thing, Item** 
 	}
 
 	Thing* destThing = __getThing(index);
-	if(destThing){
+	if(destThing)
 		*destItem = destThing->getItem();
-	}
 
-	if(Cylinder* subCylinder = dynamic_cast<Cylinder*>(destThing)){
+	Cylinder* subCylinder = dynamic_cast<Cylinder*>(destThing);
+
+	if(subCylinder){
 		index = INDEX_WHEREEVER;
 		*destItem = NULL;
 		return subCylinder;
 	}
-
-	return this;
+	else
+		return this;
 }
 
 void Player::__addThing(Thing* thing)
@@ -3727,14 +3653,15 @@ void Player::doAttacking(uint32_t interval)
 		Item* tool = getWeapon();
 		bool result = false;
 		const Weapon* weapon = g_weapons->getWeapon(tool);
-		uint32_t delay = getAttackSpeed();
-
 		if(weapon){
 			if(!weapon->interruptSwing()){
 				result = weapon->useWeapon(this, tool, attackedCreature);
 			}
 			else if(!canDoAction()){
-				delay = getNextActionTime();
+				uint32_t delay = getNextActionTime();
+				SchedulerTask* task = createSchedulerTask(delay, boost::bind(&Game::checkCreatureAttack,		
+					&g_game, getID()));		
+				setNextActionTask(task);
 			}
 			else {
 				// If the player is not exhausted OR if the player's weapon
@@ -3748,10 +3675,6 @@ void Player::doAttacking(uint32_t interval)
 		else{
 			result = Weapon::useFist(this, attackedCreature);
 		}
-
-		SchedulerTask* task = createSchedulerTask(SCHEDULER_MINTICKS, boost::bind(&Game::checkCreatureAttack,
-			&g_game, getID()));
-		setNextActionTask(task);
 
 		if(result){
 			lastAttack = OTSYS_TIME();
@@ -3876,12 +3799,6 @@ void Player::onAddCombatCondition(ConditionType_t type, bool hadCondition)
 	if(type == CONDITION_POISON){
 		sendTextMessage(MSG_STATUS_DEFAULT, "You are poisoned.");
 	}
-	else if(type == CONDITION_PARALYZE){
-		sendTextMessage(MSG_STATUS_DEFAULT, "You are paralyzed.");
-	}
-	else if(type == CONDITION_DRUNK){
-		sendTextMessage(MSG_STATUS_DEFAULT, "You are drunk.");
-	}
 }
 
 void Player::onEndCondition(ConditionType_t type, bool lastCondition)
@@ -3925,7 +3842,7 @@ void Player::onCombatRemoveCondition(const Creature* attacker, Condition* condit
 	}
 
 	if(remove){
-		if(!canDoAction()){
+	/*	if(!canDoAction()){
 			int32_t delay = getNextActionTime();
 			delay -= (delay % EVENT_CREATURE_THINK_INTERVAL);
 			if(delay < 0){
@@ -3935,9 +3852,9 @@ void Player::onCombatRemoveCondition(const Creature* attacker, Condition* condit
 				condition->setTicks(delay);
 			}
 		}
-		else{
+		else{*/
 			removeCondition(condition);
-		}
+	/*	}*/
 	}
 }
 

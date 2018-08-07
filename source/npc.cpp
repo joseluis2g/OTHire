@@ -123,6 +123,7 @@ void Npc::reset()
 	hasScriptedFocus = false;
 	focusCreature = 0;
 	isIdle = true;
+	initialLookDir = NORTH;
 
 	delete m_npcEventHandler;
 	m_npcEventHandler = NULL;
@@ -815,7 +816,6 @@ int NpcScriptInterface::luaSetNpcFocus(lua_State *L)
 		}
 		else{
 			npc->hasScriptedFocus = false;
-			npc->turnToInitialLookDirection();
 		}
 
 		npc->setCreatureFocus(creature);
